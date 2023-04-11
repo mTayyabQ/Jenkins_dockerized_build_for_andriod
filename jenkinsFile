@@ -1,0 +1,66 @@
+pipeline {
+    agent {
+        label 'mac_mini'
+    }
+
+    environment {
+        ARTIFACTS_PATH = '**/build/*.ipa'
+        LAST_COMMIT_MESSAGE_FILE = 'lastCommitMsg.txt'
+    }
+
+    stages {
+        stage('Init') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Git commit Status') {
+            when {
+                expression { sh(returnStdout: true, script: "git log -1 | grep '\\[ci skip\\]'").trim() == "" }
+            }
+            steps {
+                sh "git log -1 > ${env.LAST_COMMIT_MESSAGE_FILE}"
+                sh "cat ${env.LAST_COMMIT_MESSAGE_FILE}"
+            }
+        }
+
+        stage('Build and Deploy') {
+            when {
+                not { branch 'main' }
+            }
+            steps {
+                sh 'bundle install'
+                sh 'bundle exec fastlane build'
+                archiveArtifacts "${env.ARTIFACTS_PATH}"
+                sh "echo 'Preparing app of deploment'"
+                //appCenter apiToken: 'token',
+                //ownerName: 'name',
+                //appName: 'appname',
+                //pathToApp: 'app/**/*.apk',
+                //distributionGroups: 'Collaborators',
+                //pathToReleaseNotes: '${env.LAST_COMMIT_MESSAGE_FILE}'
+                sh "ls"
+                sh "echo 'app deployed'"
+            }
+        }
+
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+    }
+
+    post {
+        success {
+            // Notify developer team of the successful build
+            mail to: 'example@gmail.com', subject: 'Build Success', body: " Build ${env.BUILD_NUMBER} was successful; ${env.BUILD_URL}"
+        }
+        failure {
+            // Notify developer team of the failure
+            mail to: 'example@gmail.com', subject: 'Oops! Build Fail', body: " Build ${env.BUILD_NUMBER} failed; ${env.BUILD_URL}"
+        }
+    }
+}
+
